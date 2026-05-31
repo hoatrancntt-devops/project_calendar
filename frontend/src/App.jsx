@@ -419,14 +419,14 @@ export default function App() {
     const DAY_NAMES = ['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'];
     const MONTH_NAMES = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
     if (viewMode === 'day') {
-      return `${DAY_NAMES[currentDate.getDay()]}, ${String(currentDate.getDate()).padStart(2,'0')}/${String(currentDate.getMonth()+1).padStart(2,'0')}`;
+      return `Ngày ${DAY_NAMES[currentDate.getDay()]}, ${String(currentDate.getDate()).padStart(2,'0')}/${String(currentDate.getMonth()+1).padStart(2,'0')}/${currentDate.getFullYear()}`;
     }
     if (viewMode === 'week') {
       const days = getWeekDays(currentDate);
       const s = days[0]; const e = days[6];
-      return `Tuần ${String(s.getDate()).padStart(2,'0')}/${String(s.getMonth()+1).padStart(2,'0')} – ${String(e.getDate()).padStart(2,'0')}/${String(e.getMonth()+1).padStart(2,'0')}`;
+      return `Tuần ${String(s.getDate()).padStart(2,'0')}/${String(s.getMonth()+1).padStart(2,'0')} – ${String(e.getDate()).padStart(2,'0')}/${String(e.getMonth()+1).padStart(2,'0')}/${e.getFullYear()}`;
     }
-    return `${MONTH_NAMES[currentDate.getMonth()]}, ${currentDate.getFullYear()}`;
+    return `${MONTH_NAMES[currentDate.getMonth()]}/${currentDate.getFullYear()}`;
   };
 
   // Trigger backend sync in background (called when selection changes)
@@ -942,7 +942,7 @@ export default function App() {
                       <ChevronLeft size={14} />
                     </button>
                     <button onClick={calToday} className="px-2.5 py-1 text-xs font-bold hover:bg-white rounded text-slate-700 transition-colors">
-                      Hôm nay
+                      {viewMode === 'day' ? 'Hôm nay' : viewMode === 'week' ? 'Tuần này' : 'Tháng này'}
                     </button>
                     <button onClick={calNext} className="p-1.5 hover:bg-white rounded text-slate-600 transition-colors">
                       <ChevronRight size={14} />
