@@ -303,14 +303,14 @@ export default function Settings({
   };
 
   // ── SMTP config local state ────────────────────────────────────────────────
-  const [smtp, setSmtp] = useState({ host: '', port: 587, secure: false, auth_user: '', password: '', from_name: '', from_email: '' });
+  const [smtp, setSmtp] = useState({ host: '', port: 587, secure: false, auth_user: '', password: '', from_name: '', from_email: '', mail_provider: 'smtp', graph_tenant_id: '', graph_client_id: '', graph_client_secret: '' });
   const [smtpLoaded, setSmtpLoaded] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'email' && !smtpLoaded) {
       fetch('/api/mail/config')
         .then(r => r.json())
-        .then(cfg => { setSmtp(prev => ({ ...prev, ...cfg, password: '' })); setSmtpLoaded(true); })
+        .then(cfg => { setSmtp(prev => ({ ...prev, ...cfg, password: '', graph_client_secret: '' })); setSmtpLoaded(true); })
         .catch(() => setSmtpLoaded(true));
     }
   }, [activeTab, smtpLoaded]);
@@ -815,43 +815,80 @@ export default function Settings({
 
             {/* SMTP server config */}
             <div className="glass-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '6px' }}>📧 Cấu hình SMTP</h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '18px' }}>
-                Dùng để gửi email cảnh báo hết hạn API. Hỗ trợ Gmail, Outlook, SMTP công ty.
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '6px' }}>📧 Cấu hình Email</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                Dùng để gửi thông báo lịch mới &amp; cảnh báo hết hạn API.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', maxWidth: '640px' }}>
-                <div style={{ gridColumn: '1/-1' }}>
-                  <label className="form-label">SMTP Host *</label>
-                  <input type="text" className="form-control" placeholder="smtp.gmail.com" value={smtp.host} onChange={e => setSmtp({...smtp, host: e.target.value})} />
+
+              {/* Provider selector */}
+              <div style={{ display: 'flex', gap: '18px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                {[['smtp', 'SMTP (Gmail/Outlook/server)'], ['graph', 'Microsoft Graph — khuyến nghị (ổn định, hết lỗi 530)']].map(([p, label]) => (
+                  <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input type="radio" name="mailprov" checked={smtp.mail_provider === p} onChange={() => setSmtp({ ...smtp, mail_provider: p })} style={{ accentColor: 'var(--primary)' }} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+
+              {smtp.mail_provider !== 'graph' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', maxWidth: '640px' }}>
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <label className="form-label">SMTP Host *</label>
+                    <input type="text" className="form-control" placeholder="smtp.gmail.com" value={smtp.host} onChange={e => setSmtp({...smtp, host: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="form-label">Port</label>
+                    <input type="number" className="form-control" placeholder="587" value={smtp.port} onChange={e => setSmtp({...smtp, port: Number(e.target.value)})} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '22px' }}>
+                    <input type="checkbox" id="smtp-secure" checked={!!smtp.secure} onChange={e => setSmtp({...smtp, secure: e.target.checked})} style={{ accentColor: 'var(--primary)' }} />
+                    <label htmlFor="smtp-secure" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>SSL/TLS (port 465)</label>
+                  </div>
+                  <div>
+                    <label className="form-label">Tài khoản SMTP</label>
+                    <input type="email" className="form-control" placeholder="your@gmail.com" value={smtp.auth_user} onChange={e => setSmtp({...smtp, auth_user: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="form-label">Mật khẩu / App Password</label>
+                    <input type="password" className="form-control" placeholder="••••••••" value={smtp.password} onChange={e => setSmtp({...smtp, password: e.target.value})} />
+                  </div>
                 </div>
-                <div>
-                  <label className="form-label">Port</label>
-                  <input type="number" className="form-control" placeholder="587" value={smtp.port} onChange={e => setSmtp({...smtp, port: Number(e.target.value)})} />
+              )}
+
+              {smtp.mail_provider === 'graph' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', maxWidth: '640px' }}>
+                  <p style={{ gridColumn: '1/-1', fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Dùng app Azure (giống đồng bộ lịch) có quyền <strong>Mail.Send</strong> (Application) + admin consent. "Email gửi (From)" bên dưới phải là mailbox trong tenant này (vd <code>system@hlv.vn</code>).
+                  </p>
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <label className="form-label">Tenant ID</label>
+                    <input type="text" className="form-control" placeholder="xxxxxxxx-xxxx-..." value={smtp.graph_tenant_id} onChange={e => setSmtp({...smtp, graph_tenant_id: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="form-label">Client ID</label>
+                    <input type="text" className="form-control" placeholder="xxxxxxxx-xxxx-..." value={smtp.graph_client_id} onChange={e => setSmtp({...smtp, graph_client_id: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="form-label">Client Secret {smtp.graph_configured && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(đã lưu — để trống nếu giữ nguyên)</span>}</label>
+                    <input type="password" className="form-control" placeholder={smtp.graph_configured ? '••••••' : 'abc~XYZ...'} value={smtp.graph_client_secret} onChange={e => setSmtp({...smtp, graph_client_secret: e.target.value})} />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '22px' }}>
-                  <input type="checkbox" id="smtp-secure" checked={!!smtp.secure} onChange={e => setSmtp({...smtp, secure: e.target.checked})} style={{ accentColor: 'var(--primary)' }} />
-                  <label htmlFor="smtp-secure" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>SSL/TLS (port 465)</label>
-                </div>
-                <div>
-                  <label className="form-label">Tài khoản SMTP</label>
-                  <input type="email" className="form-control" placeholder="your@gmail.com" value={smtp.auth_user} onChange={e => setSmtp({...smtp, auth_user: e.target.value})} />
-                </div>
-                <div>
-                  <label className="form-label">Mật khẩu / App Password</label>
-                  <input type="password" className="form-control" placeholder="••••••••" value={smtp.password} onChange={e => setSmtp({...smtp, password: e.target.value})} />
-                </div>
+              )}
+
+              {/* Shared sender fields (both providers) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', maxWidth: '640px', marginTop: '14px' }}>
                 <div>
                   <label className="form-label">Tên người gửi</label>
-                  <input type="text" className="form-control" placeholder="Hệ thống Lịch Trình HLV" value={smtp.from_name} onChange={e => setSmtp({...smtp, from_name: e.target.value})} />
+                  <input type="text" className="form-control" placeholder="He thong Lich BOD - HLV" value={smtp.from_name} onChange={e => setSmtp({...smtp, from_name: e.target.value})} />
                 </div>
                 <div>
-                  <label className="form-label">Email gửi đi (From)</label>
-                  <input type="email" className="form-control" placeholder="noreply@company.vn" value={smtp.from_email} onChange={e => setSmtp({...smtp, from_email: e.target.value})} />
+                  <label className="form-label">Email gửi đi (From / Sender)</label>
+                  <input type="email" className="form-control" placeholder="system@hlv.vn" value={smtp.from_email} onChange={e => setSmtp({...smtp, from_email: e.target.value})} />
                 </div>
               </div>
               <div style={{ marginTop: '18px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <button className="btn btn-primary" onClick={handleSaveSmtp} disabled={testMailStatus === 'saving'}>
-                  <Save size={14} /> {testMailStatus === 'saving' ? 'Đang lưu...' : 'Lưu cấu hình SMTP'}
+                  <Save size={14} /> {testMailStatus === 'saving' ? 'Đang lưu...' : 'Lưu cấu hình Email'}
                 </button>
                 {testMailStatus === 'saved' && <span className="badge badge-success">✅ Đã lưu</span>}
               </div>

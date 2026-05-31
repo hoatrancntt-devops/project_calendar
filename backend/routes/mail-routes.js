@@ -7,23 +7,46 @@ const { sendNewEventsEmail } = require('../services/calendar-sync');
 router.get('/config', (req, res) => {
   const cfg = db.prepare('SELECT * FROM smtp_config WHERE id = 1').get() || {};
   res.json({
-    configured: !!cfg.host,
-    host:       cfg.host       || '',
-    port:       cfg.port       || 587,
-    secure:     !!cfg.secure,
-    from_name:  cfg.from_name  || '',
-    from_email: cfg.from_email || '',
-    // auth_user and password intentionally omitted
+    configured:       !!cfg.host,
+    host:             cfg.host       || '',
+    port:             cfg.port       || 587,
+    secure:           !!cfg.secure,
+    auth_user:        cfg.auth_user  || '',
+    from_name:        cfg.from_name  || '',
+    from_email:       cfg.from_email || '',
+    mail_provider:    cfg.mail_provider || 'smtp',
+    graph_tenant_id:  cfg.graph_tenant_id || '',
+    graph_client_id:  cfg.graph_client_id || '',
+    graph_configured: !!cfg.graph_client_secret,
+    // password and graph_client_secret intentionally omitted
   });
 });
 
-// POST /api/mail/config — save SMTP config
+// POST /api/mail/config — save mail config (SMTP + Graph). Secrets only updated when
+// a real (non-masked) value is sent, so re-saving the form doesn't wipe them.
 router.post('/config', (req, res) => {
-  const { host, port, secure, auth_user, password, from_name, from_email } = req.body;
-  const stmt = password && password !== '••••••'
-    ? db.prepare('UPDATE smtp_config SET host=@host,port=@port,secure=@secure,auth_user=@auth_user,password=@password,from_name=@from_name,from_email=@from_email WHERE id=1')
-    : db.prepare('UPDATE smtp_config SET host=@host,port=@port,secure=@secure,auth_user=@auth_user,from_name=@from_name,from_email=@from_email WHERE id=1');
-  stmt.run({ host, port: Number(port) || 587, secure: secure ? 1 : 0, auth_user, password, from_name, from_email });
+  const b = req.body || {};
+  const masked = (v) => !v || v === '••••••' || v === '••••••••';
+
+  db.prepare(`UPDATE smtp_config SET
+    host=@host, port=@port, secure=@secure, auth_user=@auth_user,
+    from_name=@from_name, from_email=@from_email,
+    mail_provider=@mail_provider, graph_tenant_id=@graph_tenant_id, graph_client_id=@graph_client_id
+    WHERE id=1`).run({
+    host:            b.host || '',
+    port:            Number(b.port) || 587,
+    secure:          b.secure ? 1 : 0,
+    auth_user:       b.auth_user || '',
+    from_name:       b.from_name || '',
+    from_email:      b.from_email || '',
+    mail_provider:   b.mail_provider === 'graph' ? 'graph' : 'smtp',
+    graph_tenant_id: b.graph_tenant_id || '',
+    graph_client_id: b.graph_client_id || '',
+  });
+
+  if (!masked(b.password)) db.prepare('UPDATE smtp_config SET password=? WHERE id=1').run(b.password);
+  if (!masked(b.graph_client_secret)) db.prepare('UPDATE smtp_config SET graph_client_secret=? WHERE id=1').run(b.graph_client_secret);
+
   res.json({ saved: true });
 });
 

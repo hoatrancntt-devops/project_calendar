@@ -19,7 +19,14 @@ function createTransporter() {
  * @param {{ to: string|string[], subject: string, html: string }} opts
  */
 async function sendMail({ to, subject, html }) {
-  const cfg         = db.prepare('SELECT * FROM smtp_config WHERE id = 1').get();
+  const cfg = db.prepare('SELECT * FROM smtp_config WHERE id = 1').get() || {};
+
+  // Route via Microsoft Graph Mail.Send when selected (avoids SMTP basic-auth flakiness)
+  if (cfg.mail_provider === 'graph') {
+    const { sendMailViaGraph } = require('./graph-mail');
+    return sendMailViaGraph({ cfg, to, subject, html });
+  }
+
   const transporter = createTransporter();
   const from        = cfg.from_name
     ? `"${cfg.from_name}" <${cfg.from_email}>`
