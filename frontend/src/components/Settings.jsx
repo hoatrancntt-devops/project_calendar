@@ -3,6 +3,30 @@ import { Save, Mail, Plus, X, RefreshCw, Users, Building2, Upload, Image, Trash2
 // graphFetch removed — SMTP via backend
 import { daysUntilExpiry, expiryStatus } from '../lib/expiry-utils';
 
+// Resize an uploaded image to a max dimension and return a compressed PNG data URL.
+// Keeps logos small so they fit the backend payload limit and localStorage quota.
+function resizeImageFile(file, maxSize = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width >= height && width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; }
+        else if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Settings({
   companies, onSaveCompanies,
   adminSettings, onSaveAdminSettings,
@@ -228,12 +252,11 @@ export default function Settings({
     setCurrentAdminPass(''); setNewAdminPass(''); setConfirmAdminPass('');
   };
 
-  const handleGlobalLogoUpload = (e) => {
+  const handleGlobalLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => setLocalGlobal({ ...localGlobal, globalCompanyLogo: event.target.result });
-    reader.readAsDataURL(file);
+    const dataUrl = await resizeImageFile(file, 256);
+    setLocalGlobal({ ...localGlobal, globalCompanyLogo: dataUrl });
   };
 
   // ── SMTP config local state ────────────────────────────────────────────────
@@ -453,12 +476,11 @@ export default function Settings({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <label className="btn btn-secondary" style={{ cursor: 'pointer', padding: '4px 10px', fontSize: '0.75rem' }}>
                             <Upload size={12} /> Tải lên
-                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
                               const file = e.target.files[0];
                               if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = ev => handleUpdateCompanyField('logo', ev.target.result);
-                              reader.readAsDataURL(file);
+                              const dataUrl = await resizeImageFile(file, 256);
+                              handleUpdateCompanyField('logo', dataUrl);
                             }} />
                           </label>
                           {activeCompany.logo && (

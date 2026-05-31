@@ -133,7 +133,8 @@ export default function App() {
         setCompanies(prev => {
           const merged = apiCompanies.map(api => {
             const local = prev.find(c => c.id === api.id) || {};
-            return { ...local, ...api, notifyEmails: local.notifyEmails || [] };
+            // Keep a non-empty local logo if backend has none (prevents wiping on reload)
+            return { ...local, ...api, logo: api.logo || local.logo || '', notifyEmails: local.notifyEmails || [] };
           });
           save('appCompanies', merged);
           return merged;
@@ -563,21 +564,31 @@ export default function App() {
     ['expired', 'critical', 'warning'].includes(expiryStatus(daysUntilExpiry(c.apiExpirationDate), expiryThresholds))
   );
 
+  // ── SHARED FOOTER (login screen + main app) ────────────────────────────────
+  const appFooter = (
+    <footer className="mt-auto py-3 px-6 border-t border-slate-200 bg-white text-center text-xs text-slate-400 flex items-center justify-center gap-2 flex-wrap">
+      <span>Calendar Booking Software v1.0 build {__BUILD_DATE__}</span>
+      <span className="hidden sm:inline">·</span>
+      <span>Thiết kế &amp; vận hành bởi MCT Hoa Tran - <a href="https://hoatranlab.io.vn" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:text-emerald-800 transition-colors">hoatranlab.io.vn</a> — ITSM Công ty SCTS</span>
+    </footer>
+  );
+
   // ── LOGIN SCREEN ───────────────────────────────────────────────────────────
   if (!isLoggedIn) {
     const loginForm = (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-100 flex flex-col p-4">
+        <div className="flex-1 flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl flex flex-col md:flex-row overflow-hidden">
 
           <div className="w-full md:w-1/2 bg-emerald-800 p-8 md:p-12 text-white flex-col justify-center hidden sm:flex">
             <Briefcase size={48} className="mb-6 opacity-80" />
-            <h1 className="text-3xl md:text-4xl font-bold mb-4">{adminSettings.globalCompanyName || 'Hệ Thống Quản Lý Lịch Trình'}</h1>
-            <p className="text-emerald-100 text-base md:text-lg">Đồng bộ tự động với Microsoft 365. Dành cho Ban Điều Hành.</p>
+            <h1 className="text-3xl md:text-4xl font-bold mb-4">{adminSettings.globalCompanyName || 'HOÀN LỘC VIỆT'}</h1>
+            <p className="text-emerald-100 text-base md:text-lg">Đồng bộ tự động với Microsoft 365. Dành cho BOD &amp; CBNV — Lưu Hành Nội Bộ.</p>
           </div>
 
           <div className="w-full md:w-1/2 p-6 sm:p-8 md:p-12">
             <div className="sm:hidden flex items-center gap-3 mb-6 text-emerald-800">
-              <Briefcase size={32} /><h1 className="text-2xl font-bold">{adminSettings.globalCompanyName || 'Lịch Trình TGĐ'}</h1>
+              <Briefcase size={32} /><h1 className="text-2xl font-bold">{adminSettings.globalCompanyName || 'HOÀN LỘC VIỆT'}</h1>
             </div>
             <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-1">Đăng nhập hệ thống</h2>
             <p className="text-sm text-slate-500 mb-6">Dành cho Trợ lý / Nhân viên ủy quyền</p>
@@ -606,6 +617,8 @@ export default function App() {
 
           </div>
         </div>
+        </div>
+        {appFooter}
       </div>
     );
     return loginForm;
@@ -1282,12 +1295,8 @@ export default function App() {
         </div>
       )}
 
-      {/* ── FOOTER ── */}
-      <footer className="mt-auto py-3 px-6 border-t border-slate-200 bg-white text-center text-xs text-slate-400 flex items-center justify-center gap-2 flex-wrap">
-        <span>Calendar Booking Software v1.0 build 30.05.2026</span>
-        <span className="hidden sm:inline">·</span>
-        <span>Thiết kế &amp; vận hành bởi <a href="https://hoatranlab.io.vn" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:text-emerald-800 transition-colors">hoatranlab.io.vn</a></span>
-      </footer>
+      {/* ── FOOTER (shared with login screen) ── */}
+      {appFooter}
     </div>
   );
 

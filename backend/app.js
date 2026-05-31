@@ -17,7 +17,7 @@ function requireApiKey(req, res, next) {
 
 app.use(helmet());
 // No CORS needed — backend is only reachable via nginx same-origin proxy
-app.use(express.json());
+app.use(express.json({ limit: '5mb' })); // allow base64 company logos in the payload
 
 // Expose the auth middleware for routes to use
 app.set('requireApiKey', requireApiKey);
