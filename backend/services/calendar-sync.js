@@ -62,6 +62,17 @@ function transformEvent(item, companyId, mailbox) {
   };
 }
 
+// Record last notification result per company (surfaced in Settings UI).
+// OK clears any prior error; ERR keeps the last success time intact.
+const recordNotifyOk = db.prepare(`
+  INSERT INTO notify_status (company_id, last_at, last_error) VALUES (?, ?, '')
+  ON CONFLICT(company_id) DO UPDATE SET last_at = excluded.last_at, last_error = ''
+`);
+const recordNotifyErr = db.prepare(`
+  INSERT INTO notify_status (company_id, last_at, last_error) VALUES (?, '', ?)
+  ON CONFLICT(company_id) DO UPDATE SET last_error = excluded.last_error
+`);
+
 const deleteByCompany = db.prepare('DELETE FROM events WHERE company_id = ?');
 const insertEvent     = db.prepare(`
   INSERT OR REPLACE INTO events
@@ -84,11 +95,13 @@ async function syncCompany(company) {
   }
 
   const token  = await getToken(company.tenant_id, company.client_id, company.client_secret);
-  // Sync window: start of current week (Mon) → +90 days — captures recent past events
-  const monday = new Date();
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); // roll back to Monday
-  monday.setHours(0, 0, 0, 0);
-  const startDT = monday.toISOString();
+  // Sync window: 30 days back → +90 days forward. The lookback captures meetings
+  // created for recent past dates (previously missed when the window started at
+  // this Monday), so they still appear on the calendar.
+  const windowStart = new Date();
+  windowStart.setDate(windowStart.getDate() - 30);
+  windowStart.setHours(0, 0, 0, 0);
+  const startDT = windowStart.toISOString();
   const future  = new Date(Date.now() + 90 * 24 * 3_600_000).toISOString(); // +90 days
   const select = 'id,subject,start,end,location,isOnlineMeeting,attendees,organizer,showAs,isCancelled';
   const syncedAt = new Date().toISOString();
@@ -134,11 +147,18 @@ async function syncCompany(company) {
   })();
 
   // Email notification for genuinely new events — skip the very first sync (no prior events)
-  // to avoid mass-emailing the whole calendar on initial setup.
+  // to avoid mass-emailing the whole calendar on initial setup. Only alert for UPCOMING
+  // events (date >= today HCM) so the 30-day lookback doesn't notify about past meetings.
   const notifyEmails = JSON.parse(company.notify_emails || '[]');
-  if (existingIds.size > 0 && newEvents.length > 0 && notifyEmails.length > 0) {
-    sendNewEventsEmail(company, newEvents, notifyEmails).catch(err =>
-      console.error(`[notify] ${company.id}: email failed — ${err.message}`));
+  const todayHCM = new Date(Date.now() + HCM_OFFSET_MS).toISOString().slice(0, 10);
+  const upcomingNew = newEvents.filter(ev => ev.date && ev.date >= todayHCM);
+  if (existingIds.size > 0 && upcomingNew.length > 0 && notifyEmails.length > 0) {
+    sendNewEventsEmail(company, upcomingNew, notifyEmails)
+      .then(() => recordNotifyOk.run(company.id, new Date().toISOString()))
+      .catch(err => {
+        console.error(`[notify] ${company.id}: email failed — ${err.message}`);
+        recordNotifyErr.run(company.id, err.message);  // surfaced in Settings UI
+      });
   }
 
   return { companyId: company.id, synced: events.length, new: newEvents.length };

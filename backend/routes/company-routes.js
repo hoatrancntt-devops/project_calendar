@@ -22,7 +22,10 @@ const syncCompanies = db.transaction((list) => {
 // GET /api/companies — return full company list (display fields + credentials)
 // Behind nginx same-origin proxy with API key; used to restore state across devices.
 router.get('/', (req, res) => {
-  const rows = db.prepare('SELECT * FROM companies').all();
+  const rows = db.prepare(`
+    SELECT c.*, n.last_at AS notify_last_at, n.last_error AS notify_last_error
+    FROM companies c LEFT JOIN notify_status n ON n.company_id = c.id
+  `).all();
   res.json(rows.map(r => ({
     id:                r.id,
     companyName:       r.company_name,
@@ -35,6 +38,8 @@ router.get('/', (req, res) => {
     apiExpirationDate: r.api_expiration_date || '',
     color:             r.color || '',
     logo:              r.logo  || '',
+    lastNotifyAt:      r.notify_last_at    || '',
+    lastNotifyError:   r.notify_last_error || '',
   })));
 });
 

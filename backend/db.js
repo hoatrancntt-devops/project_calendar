@@ -67,6 +67,14 @@ db.exec(`
     allowed_company_ids TEXT DEFAULT '[]',
     allowed_mailboxes   TEXT DEFAULT '{}'
   );
+
+  -- Last calendar-notification result per company (kept separate from companies so the
+  -- frontend's INSERT-OR-REPLACE upsert never wipes it). Surfaced in Settings UI.
+  CREATE TABLE IF NOT EXISTS notify_status (
+    company_id TEXT PRIMARY KEY,
+    last_at    TEXT DEFAULT '',
+    last_error TEXT DEFAULT ''
+  );
 `);
 
 // Graceful migrations

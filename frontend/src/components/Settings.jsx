@@ -559,6 +559,16 @@ export default function Settings({
                   <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.4 }}>
                     Lưu ý: thông báo chỉ tự gửi khi có <strong>sự kiện mới</strong> được đồng bộ từ M365. Bấm <strong>Lưu</strong> sau khi thêm email, rồi "Gửi thử" để kiểm tra.
                   </p>
+                  {/* Last automatic-notification result (from backend cron) */}
+                  {activeCompany.lastNotifyError ? (
+                    <div style={{ marginTop: '8px', padding: '8px 10px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', fontSize: '0.75rem', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <AlertTriangle size={13} /> Lỗi gửi tự động gần nhất: {activeCompany.lastNotifyError}
+                    </div>
+                  ) : activeCompany.lastNotifyAt ? (
+                    <div style={{ marginTop: '8px', fontSize: '0.72rem', color: 'var(--secondary)' }}>
+                      ✓ Tự động gửi gần nhất: {new Date(activeCompany.lastNotifyAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Sync mailboxes */}
