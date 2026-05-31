@@ -567,7 +567,7 @@ export default function App() {
   // ── SHARED FOOTER (login screen + main app) ────────────────────────────────
   const appFooter = (
     <footer className="mt-auto py-3 px-6 border-t border-slate-200 bg-white text-center text-xs text-slate-400 flex items-center justify-center gap-2 flex-wrap">
-      <span>Calendar Booking Software v1.0 build {__BUILD_DATE__}</span>
+      <span>Calendar Sync For Ms365 v1.0 build {__BUILD_DATE__}</span>
       <span className="hidden sm:inline">·</span>
       <span>Thiết kế &amp; vận hành bởi MCT Hoa Tran - <a href="https://hoatranlab.io.vn" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:text-emerald-800 transition-colors">hoatranlab.io.vn</a> — ITSM Công ty SCTS</span>
     </footer>
