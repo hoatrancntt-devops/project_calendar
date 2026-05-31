@@ -93,21 +93,34 @@ async function syncCompany(company) {
   const select = 'id,subject,start,end,location,isOnlineMeeting,attendees,organizer,showAs,isCancelled';
   const syncedAt = new Date().toISOString();
 
+  // Fetch ALL events in window via pagination — Graph caps a page at $top, so we
+  // must follow @odata.nextLink. $orderby gives deterministic paging (chronological).
+  // Without this, only the first 50 were fetched → events beyond that were never
+  // synced nor detected as "new" (silent truncation).
+  const PAGE_SIZE       = 100;
+  const MAX_PER_MAILBOX = 1000; // safety cap to bound a runaway calendar
   const events = [];
   for (const mailbox of mailboxes) {
-    const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/calendarView` +
+    let url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/calendarView` +
       `?startDateTime=${encodeURIComponent(startDT)}&endDateTime=${encodeURIComponent(future)}` +
-      `&$top=50&$select=${select}`;
-    let data;
-    try {
-      ({ data } = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }));
-    } catch (err) {
-      const status = err.response?.status;
-      const detail = err.response?.data?.error?.message || err.message;
-      console.error(`[sync] ${company.id}/${mailbox}: Graph API ${status} — ${detail}`);
-      throw new Error(`Graph API ${status}: ${detail}`);
+      `&$orderby=${encodeURIComponent('start/dateTime')}&$top=${PAGE_SIZE}&$select=${select}`;
+    let fetched = 0;
+    while (url && fetched < MAX_PER_MAILBOX) {
+      let data;
+      try {
+        ({ data } = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }));
+      } catch (err) {
+        const status = err.response?.status;
+        const detail = err.response?.data?.error?.message || err.message;
+        console.error(`[sync] ${company.id}/${mailbox}: Graph API ${status} — ${detail}`);
+        throw new Error(`Graph API ${status}: ${detail}`);
+      }
+      for (const item of (data.value || [])) { events.push(transformEvent(item, company.id, mailbox)); fetched++; }
+      url = data['@odata.nextLink'] || null;
     }
-    for (const item of (data.value || [])) events.push(transformEvent(item, company.id, mailbox));
+    if (fetched >= MAX_PER_MAILBOX) {
+      console.warn(`[sync] ${company.id}/${mailbox}: hit MAX_PER_MAILBOX cap (${MAX_PER_MAILBOX}) — some events may be unsynced`);
+    }
   }
 
   // Detect new events: compare against existing event IDs before replacing
