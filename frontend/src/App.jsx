@@ -80,7 +80,10 @@ async function fetchApiEvents(companyIds, mailboxes) {
 }
 
 export default function App() {
-  const lang = 'vi';
+  // Auto-detect UI language from the browser: Vietnamese if the browser prefers vi,
+  // otherwise English. (Only strings wired through t() switch — see note.)
+  const lang = (typeof navigator !== 'undefined' && (navigator.language || navigator.userLanguage) || 'vi')
+    .toLowerCase().startsWith('vi') ? 'vi' : 'en';
   const t = (key) => translations[lang]?.[key] || key;
 
   // ── Persisted global state ─────────────────────────────────────────────────
@@ -476,7 +479,13 @@ export default function App() {
   };
 
   // ── Computed ───────────────────────────────────────────────────────────────
-  const allowedCompanyIds = currentUser?.allowedCompanyIds || [];
+  // Always reflect the LIVE company list so counts update dynamically when companies
+  // are added/removed: admin sees every current company; other users see their granted
+  // companies minus any that were deleted (stale ids from login snapshot are dropped).
+  const allCompanyIds = companies.map(c => c.id);
+  const allowedCompanyIds = currentUser?.role === 'admin'
+    ? allCompanyIds
+    : (currentUser?.allowedCompanyIds || []).filter(id => allCompanyIds.includes(id));
 
   /** Mailboxes a user can view for a given company. Empty = all synced mailboxes. */
   const userMailboxes = (companyId) => {
