@@ -1,0 +1,4 @@
+/* Reset standard styles to prevent conflicts with index.css */
+#root {
+  width: 100%;
+}

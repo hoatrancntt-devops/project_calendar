@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: m365-calendar-backend
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/data/calendar.db
+      - BACKEND_API_SECRET=${BACKEND_API_SECRET}
+    volumes:
+      - calendar_data:/data
+    networks:
+      - calendar_net
+    # NOT exposed to host — only reachable via nginx proxy inside Docker network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: m365-calendar-app
+    ports:
+      - "4141:80"
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_API_SECRET=${BACKEND_API_SECRET}
+    networks:
+      - calendar_net
+
+volumes:
+  calendar_data:
+
+networks:
+  calendar_net:
