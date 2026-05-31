@@ -175,11 +175,19 @@ async function sendNewEventsEmail(company, newEvents, recipients) {
         <td style="padding:6px 10px;border-bottom:1px solid #eee;">${ev.type === 'teams' ? '📹 Teams' : '📍 ' + (ev.room || ev.location || 'Offline')}</td>
       </tr>`).join('');
 
+  // Source mailbox(es) the new events came from. A company may sync several mailboxes,
+  // so collapse to "N hòm thư" when more than one to keep the subject readable.
+  const fromList  = [...new Set(newEvents.map(ev => ev.mailbox).filter(Boolean))];
+  const fromLabel = fromList.length === 1 ? fromList[0]
+                  : fromList.length > 1  ? `${fromList.length} hòm thư`
+                  : '';
+  const fromPart  = fromLabel ? ` từ ${fromLabel}` : '';
+
   await sendMail({
     to: recipients,
-    subject: `[LỊCH MỚI] ${company.company_name} — ${newEvents.length} sự kiện mới`,
+    subject: `Thông báo - Có ${newEvents.length} lịch họp mới${fromPart} - ${company.company_name}`,
     html: `
-      <h2 style="color:#0f766e;">📅 Có ${newEvents.length} lịch họp mới — ${company.company_name}</h2>
+      <h2 style="color:#0f766e;">📅 Có ${newEvents.length} lịch họp mới${fromPart} — ${company.company_name}</h2>
       <p>Hệ thống vừa đồng bộ các sự kiện mới từ Microsoft 365:</p>
       <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;width:100%;max-width:640px;">
         <thead><tr style="background:#f1f5f9;">

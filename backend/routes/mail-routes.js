@@ -100,14 +100,17 @@ router.post('/test-notify', async (req, res) => {
     return res.status(400).json({ error: 'Công ty chưa có "Email Nhận Thông Báo Lịch". Thêm email và bấm Lưu trước.' });
   }
 
-  // Sample event so the recipient sees the real notification format
+  // Sample event so the recipient sees the real notification format.
+  // mailbox set to the company's first synced mailbox → subject shows "từ <email>".
   const now = new Date();
+  const firstMailbox = (JSON.parse(company.sync_mailboxes || '[]'))[0] || '';
   const sample = [{
     date: now.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
     time: now.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' }),
     title: '[THỬ] Sự kiện kiểm tra thông báo',
     type: 'teams',
     room: '', location: 'Microsoft Teams',
+    mailbox: firstMailbox,
   }];
 
   try {
