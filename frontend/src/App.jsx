@@ -581,14 +581,19 @@ export default function App() {
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl flex flex-col md:flex-row overflow-hidden">
 
           <div className="w-full md:w-1/2 bg-emerald-800 p-8 md:p-12 text-white flex-col justify-center hidden sm:flex">
-            <Briefcase size={48} className="mb-6 opacity-80" />
+            {(adminSettings.globalCompanyLogo || adminSettings.faviconUrl)
+              ? <img src={adminSettings.globalCompanyLogo || adminSettings.faviconUrl} alt="Logo" className="h-16 w-auto mb-6 object-contain bg-white/10 rounded-lg p-2 self-start" />
+              : <Briefcase size={48} className="mb-6 opacity-80" />}
             <h1 className="text-3xl md:text-4xl font-bold mb-4">{adminSettings.globalCompanyName || 'HOÀN LỘC VIỆT'}</h1>
             <p className="text-emerald-100 text-base md:text-lg">Đồng bộ tự động với Microsoft 365. Dành cho BOD &amp; CBNV — Lưu Hành Nội Bộ.</p>
           </div>
 
           <div className="w-full md:w-1/2 p-6 sm:p-8 md:p-12">
             <div className="sm:hidden flex items-center gap-3 mb-6 text-emerald-800">
-              <Briefcase size={32} /><h1 className="text-2xl font-bold">{adminSettings.globalCompanyName || 'HOÀN LỘC VIỆT'}</h1>
+              {(adminSettings.globalCompanyLogo || adminSettings.faviconUrl)
+                ? <img src={adminSettings.globalCompanyLogo || adminSettings.faviconUrl} alt="Logo" className="h-8 w-auto object-contain" />
+                : <Briefcase size={32} />}
+              <h1 className="text-2xl font-bold">{adminSettings.globalCompanyName || 'HOÀN LỘC VIỆT'}</h1>
             </div>
             <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-1">Đăng nhập hệ thống</h2>
             <p className="text-sm text-slate-500 mb-6">Dành cho Trợ lý / Nhân viên ủy quyền</p>

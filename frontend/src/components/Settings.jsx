@@ -133,13 +133,17 @@ export default function Settings({
     if (activeCompanyId === id) setActiveCompanyId(updated[0]?.id || null);
   };
 
-  // Persist a company list to the backend. Returns the fetch promise so callers
-  // (auto-save on logo upload) can await / handle errors.
-  const postCompanies = (list) => fetch('/api/companies', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(companyPayload(list)),
-  });
+  // Persist a company list to the backend. Throws on non-2xx so callers (auto-save on
+  // logo upload) surface the real HTTP error instead of a silent failure.
+  const postCompanies = async (list) => {
+    const res = await fetch('/api/companies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(companyPayload(list)),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res;
+  };
 
   const handleSaveAll = () => {
     onSaveAdminSettings(localGlobal);
