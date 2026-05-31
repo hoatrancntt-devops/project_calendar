@@ -139,7 +139,18 @@ async function syncCompany(company) {
   // Detect new events: compare against existing event IDs before replacing
   const existingRows = db.prepare('SELECT id FROM events WHERE company_id = ?').all(company.id);
   const existingIds  = new Set(existingRows.map(r => r.id));
-  const newEvents    = events.filter(ev => !existingIds.has(ev.id));
+
+  // GUARD: Graph occasionally returns a partial result (e.g. 1 of 77 events) with no
+  // HTTP error. Because we replace-all, that would wipe the calendar down to the partial
+  // set — and when the full set returns next cycle, every event counts as "new" → a
+  // notification burst (and real new events can be missed meanwhile). So if a previously
+  // healthy set shrinks drastically, skip this destructive update and keep existing data.
+  if (existingIds.size >= 10 && events.length < existingIds.size * 0.5) {
+    console.warn(`[sync] ${company.id}: skipped replace — fetched ${events.length} << existing ${existingIds.size} (likely partial Graph response)`);
+    return { companyId: company.id, synced: existingIds.size, new: 0, skippedPartial: true };
+  }
+
+  const newEvents = events.filter(ev => !existingIds.has(ev.id));
 
   db.transaction(() => {
     deleteByCompany.run(company.id);
