@@ -3,15 +3,26 @@ import { Save, Mail, Plus, X, RefreshCw, Users, Building2, Upload, Image, Trash2
 // graphFetch removed — SMTP via backend
 import { daysUntilExpiry, expiryStatus } from '../lib/expiry-utils';
 
-// Resize an uploaded image to a max dimension and return a compressed PNG data URL.
-// Keeps logos small so they fit the backend payload limit and localStorage quota.
-function resizeImageFile(file, maxSize = 256) {
+// Read a File as a data URL unchanged — used for SVG and as a fallback.
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = (e) => resolve(e.target.result);
+    r.onerror = () => reject(new Error('Không đọc được tệp'));
+    r.readAsDataURL(file);
+  });
+}
+
+// Resize a RASTER image to a max dimension; returns a compressed PNG data URL.
+// Rejects when the image has no intrinsic size so the caller can fall back.
+function resizeRaster(file, maxSize = 256) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
+        if (!width || !height) return reject(new Error('Ảnh không có kích thước'));
         if (width >= height && width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; }
         else if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; }
         const canvas = document.createElement('canvas');
@@ -19,12 +30,38 @@ function resizeImageFile(file, maxSize = 256) {
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/png'));
       };
-      img.onerror = reject;
+      img.onerror = () => reject(new Error('Không đọc được ảnh'));
       img.src = e.target.result;
     };
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error('Không đọc được tệp'));
     reader.readAsDataURL(file);
   });
+}
+
+// Process ANY uploaded image into a storable data URL:
+// SVG kept as-is (canvas can't rasterize reliably); raster resized to 256px;
+// if resize fails, fall back to the original file so the upload still works.
+async function processLogo(file) {
+  if (file.type === 'image/svg+xml') return fileToDataURL(file);
+  try { return await resizeRaster(file, 256); }
+  catch { return fileToDataURL(file); }
+}
+
+// Map the editable company list to the backend payload shape (shared by save + auto-save).
+function companyPayload(list) {
+  return list.map(c => ({
+    id:                c.id,
+    companyName:       c.companyName,
+    tenantId:          c.tenantId          || '',
+    clientId:          c.clientId          || '',
+    clientSecret:      c.clientSecret      || '',
+    syncMailboxes:     c.syncMailboxes      || [],
+    expiryAlertEmails: c.expiryAlertEmails  || [],
+    notifyEmails:      c.notifyEmails       || [],
+    apiExpirationDate: c.apiExpirationDate  || '',
+    color:             c.color              || '',
+    logo:              c.logo               || '',
+  }));
 }
 
 export default function Settings({
@@ -96,6 +133,14 @@ export default function Settings({
     if (activeCompanyId === id) setActiveCompanyId(updated[0]?.id || null);
   };
 
+  // Persist a company list to the backend. Returns the fetch promise so callers
+  // (auto-save on logo upload) can await / handle errors.
+  const postCompanies = (list) => fetch('/api/companies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(companyPayload(list)),
+  });
+
   const handleSaveAll = () => {
     onSaveAdminSettings(localGlobal);
     onSaveCompanies(localCompanies);
@@ -116,23 +161,7 @@ export default function Settings({
     }).catch(() => {});
 
     // Sync company credentials to backend so calendar sync can use them
-    fetch('/api/companies', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(localCompanies.map(c => ({
-        id:                c.id,
-        companyName:       c.companyName,
-        tenantId:          c.tenantId          || '',
-        clientId:          c.clientId          || '',
-        clientSecret:      c.clientSecret      || '',
-        syncMailboxes:     c.syncMailboxes      || [],
-        expiryAlertEmails: c.expiryAlertEmails  || [],
-        notifyEmails:      c.notifyEmails       || [],
-        apiExpirationDate: c.apiExpirationDate  || '',
-        color:             c.color              || '',
-        logo:              c.logo               || '',
-      }))),
-    }).catch(() => {}); // fire-and-forget — UI not blocked
+    postCompanies(localCompanies).catch(() => {}); // fire-and-forget — UI not blocked
 
     setMessage({ type: 'success', text: t ? t('msg_saved') : 'Đã cập nhật cấu hình thành công!' });
     setTimeout(() => setMessage(null), 3000);
@@ -255,8 +284,18 @@ export default function Settings({
   const handleGlobalLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const dataUrl = await resizeImageFile(file, 256);
-    setLocalGlobal({ ...localGlobal, globalCompanyLogo: dataUrl });
+    try {
+      const dataUrl = await processLogo(file);
+      const updated = { ...localGlobal, globalCompanyLogo: dataUrl };
+      setLocalGlobal(updated);
+      onSaveAdminSettings(updated);
+      fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      setMessage({ type: 'success', text: 'Đã tải & lưu logo.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: `Upload logo thất bại: ${err.message || err}` });
+    }
+    setTimeout(() => setMessage(null), 3000);
+    e.target.value = '';
   };
 
   // ── SMTP config local state ────────────────────────────────────────────────
@@ -479,8 +518,18 @@ export default function Settings({
                             <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
                               const file = e.target.files[0];
                               if (!file) return;
-                              const dataUrl = await resizeImageFile(file, 256);
-                              handleUpdateCompanyField('logo', dataUrl);
+                              try {
+                                const dataUrl = await processLogo(file);
+                                const updated = localCompanies.map(c => c.id === activeCompanyId ? { ...c, logo: dataUrl } : c);
+                                setLocalCompanies(updated);
+                                onSaveCompanies(updated);        // reflect in app immediately
+                                await postCompanies(updated);    // auto-persist (no need to press Lưu)
+                                setMessage({ type: 'success', text: 'Đã tải & lưu logo.' });
+                              } catch (err) {
+                                setMessage({ type: 'error', text: `Upload logo thất bại: ${err.message || err}` });
+                              }
+                              setTimeout(() => setMessage(null), 3000);
+                              e.target.value = '';
                             }} />
                           </label>
                           {activeCompany.logo && (
