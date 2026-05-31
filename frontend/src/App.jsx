@@ -203,7 +203,7 @@ export default function App() {
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const [selectedMailbox, setSelectedMailbox]     = useState('all');
   const [isSyncing, setIsSyncing]     = useState(false);
-  const [viewMode, setViewMode]       = useState('day');
+  const [viewMode, setViewMode]       = useState('week'); // default calendar view = Tuần
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calSelectedEvent, setCalSelectedEvent] = useState(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
