@@ -138,6 +138,30 @@ export default function Settings({
   const handleRemoveNotifyEmail = (email) =>
     handleUpdateCompanyField('notifyEmails', (activeCompany.notifyEmails || []).filter(e => e !== email));
 
+  // Send a sample notification to verify delivery without waiting for a new event.
+  // Backend resolves recipients from the SAVED DB record — so the user must Save first.
+  const handleTestNotify = async () => {
+    if (!(activeCompany.notifyEmails || []).length) {
+      setMessage({ type: 'error', text: 'Chưa có email nhận thông báo. Thêm email rồi bấm Lưu trước.' });
+      setTimeout(() => setMessage(null), 4000);
+      return;
+    }
+    setMessage({ type: 'success', text: 'Đang gửi thử thông báo...' });
+    try {
+      const res = await fetch('/api/mail/test-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: activeCompany.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gửi thất bại');
+      setMessage({ type: 'success', text: `Đã gửi thử tới ${data.recipients} người nhận. Kiểm tra hộp thư (cả Spam).` });
+    } catch (err) {
+      setMessage({ type: 'error', text: `Lỗi gửi thông báo: ${err.message}` });
+    }
+    setTimeout(() => setMessage(null), 5000);
+  };
+
   // ── Expiry alert email handlers ────────────────────────────────────────────
   const handleAddExpiryEmail = (e) => {
     e.preventDefault();
@@ -527,6 +551,14 @@ export default function Settings({
                     <input type="email" name="notifyEmail" className="form-control" placeholder="email@company.com..." required style={{ flex: 1 }} />
                     <button type="submit" className="btn btn-secondary"><Plus size={16} /> Thêm</button>
                   </form>
+                  {/* Verify delivery without waiting for a real new event (reads SAVED recipients) */}
+                  <button type="button" className="btn btn-secondary" onClick={handleTestNotify}
+                    style={{ marginTop: '10px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <Mail size={15} /> Gửi thử thông báo
+                  </button>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.4 }}>
+                    Lưu ý: thông báo chỉ tự gửi khi có <strong>sự kiện mới</strong> được đồng bộ từ M365. Bấm <strong>Lưu</strong> sau khi thêm email, rồi "Gửi thử" để kiểm tra.
+                  </p>
                 </div>
 
                 {/* Sync mailboxes */}

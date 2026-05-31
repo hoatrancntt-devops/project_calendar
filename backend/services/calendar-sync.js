@@ -172,4 +172,4 @@ async function syncAll() {
   return results;
 }
 
-module.exports = { syncCompany, syncAll };
+module.exports = { syncCompany, syncAll, sendNewEventsEmail };

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../db');
 const { sendMail, createTransporter } = require('../services/smtp-mail');
+const { sendNewEventsEmail } = require('../services/calendar-sync');
 
 // GET /api/mail/config — return non-sensitive fields only (no credentials)
 router.get('/config', (req, res) => {
@@ -78,6 +79,39 @@ router.post('/alert', async (req, res) => {
         <p style="margin-top:16px;">Vui lòng gia hạn hoặc cấp mới API credentials.</p>
       `,
     });
+    res.json({ sent: true, recipients: recipients.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/mail/test-notify — send a SAMPLE "new event" notification to a company's
+// notify recipients. Recipients resolved server-side from DB (anti-relay). Lets the
+// admin verify delivery without waiting for a genuinely new calendar event.
+router.post('/test-notify', async (req, res) => {
+  const { companyId } = req.body;
+  if (!companyId) return res.status(400).json({ error: 'Thiếu companyId' });
+
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId);
+  if (!company) return res.status(404).json({ error: 'Công ty không tìm thấy' });
+
+  const recipients = JSON.parse(company.notify_emails || '[]');
+  if (!recipients.length) {
+    return res.status(400).json({ error: 'Công ty chưa có "Email Nhận Thông Báo Lịch". Thêm email và bấm Lưu trước.' });
+  }
+
+  // Sample event so the recipient sees the real notification format
+  const now = new Date();
+  const sample = [{
+    date: now.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
+    time: now.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' }),
+    title: '[THỬ] Sự kiện kiểm tra thông báo',
+    type: 'teams',
+    room: '', location: 'Microsoft Teams',
+  }];
+
+  try {
+    await sendNewEventsEmail(company, sample, recipients);
     res.json({ sent: true, recipients: recipients.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
