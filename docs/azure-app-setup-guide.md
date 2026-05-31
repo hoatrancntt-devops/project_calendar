@@ -114,6 +114,32 @@ az ad app credential reset --id <CLIENT_ID> --append --display-name "calendar-sy
 
 ---
 
+## 📨 Gửi email qua Microsoft Graph (khuyến nghị — thay SMTP)
+
+> SMTP basic auth của Office365 hay lỗi `530 Client not authenticated` (Microsoft đang khai tử basic auth). Gửi qua **Graph Mail.Send** ổn định 100%, dùng chính app registration đã có.
+
+**Bước 1 — Cấp quyền Mail.Send cho app:**
+1. Azure Portal → **App registrations** → chọn app (có thể dùng app đang đồng bộ lịch của tenant chứa mailbox gửi, vd hlv.vn).
+2. **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions** → tìm **`Mail.Send`** → Add.
+3. **Grant admin consent** → Confirm.
+
+**Bước 2 — Cấu hình trong app:**
+Settings → tab **Email** → chọn **Microsoft Graph**, điền:
+
+| Trường | Giá trị |
+|--------|---------|
+| Tenant ID | Directory (tenant) ID của app |
+| Client ID | Application (client) ID |
+| Client Secret | Secret value (xem mục tạo/gia hạn secret) |
+| Email gửi (From / Sender) | Mailbox thật trong tenant, vd `system@hlv.vn` |
+| Tên người gửi | vd `He thong Lich BOD - HLV` (tránh emoji → đỡ vào Spam) |
+
+Nhấn **Lưu** → dùng nút **Gửi Test** để kiểm tra. Hết phụ thuộc SMTP.
+
+> ⚠️ `Mail.Send` (Application) cho phép app gửi as **bất kỳ mailbox** trong tenant → giữ Client Secret cẩn thận. Lỗi `403` = thiếu Mail.Send/chưa consent; `404` = sender mailbox không tồn tại.
+
+---
+
 ## Lưu ý bảo mật
 
 - Client Secret **không lưu trong browser** — chỉ truyền lên backend khi admin nhấn Lưu
