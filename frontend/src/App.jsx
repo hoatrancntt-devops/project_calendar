@@ -942,7 +942,7 @@ export default function App() {
                       <ChevronLeft size={14} />
                     </button>
                     <button onClick={calToday} className="px-2.5 py-1 text-xs font-bold hover:bg-white rounded text-slate-700 transition-colors">
-                      {viewMode === 'day' ? 'Hôm nay' : viewMode === 'week' ? 'Tuần này' : 'Tháng này'}
+                      {viewMode === 'day' ? 'Ngày' : viewMode === 'week' ? 'Tuần' : 'Tháng'}
                     </button>
                     <button onClick={calNext} className="p-1.5 hover:bg-white rounded text-slate-600 transition-colors">
                       <ChevronRight size={14} />
