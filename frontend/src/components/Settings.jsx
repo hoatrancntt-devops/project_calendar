@@ -578,6 +578,25 @@ export default function Settings({
                       <label className="form-label">Ngày hết hạn API</label>
                       <input type="date" className="form-control" value={activeCompany.apiExpirationDate || ''} onChange={e => handleUpdateCompanyField('apiExpirationDate', e.target.value)} />
                     </div>
+
+                    {/* Collapsible renewal guide — see docs/azure-app-setup-guide.md */}
+                    <details style={{ marginTop: '4px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-card-hover)' }}>
+                      <summary style={{ cursor: 'pointer', padding: '10px 12px', fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>
+                        📘 Hướng dẫn gia hạn API Microsoft 365
+                      </summary>
+                      <div style={{ padding: '0 14px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                        <p style={{ margin: '4px 0 8px' }}>Khi secret sắp/đã hết hạn (cảnh báo email + banner đỏ) — gia hạn, <strong>không cần tạo lại App</strong>:</p>
+                        <ol style={{ margin: 0, paddingLeft: '18px' }}>
+                          <li>Vào <strong>portal.azure.com</strong> → <strong>App registrations</strong> → chọn app theo <strong>Client ID</strong> ở trên.</li>
+                          <li><strong>Certificates &amp; secrets</strong> → <strong>Client secrets</strong> → <strong>+ New client secret</strong>.</li>
+                          <li>Description tuỳ ý; Expires: <strong>24 months</strong> → <strong>Add</strong>.</li>
+                          <li><strong>Copy ngay cột "Value"</strong> (dạng <code>abc~XYZ...</code>, chỉ hiện 1 lần — KHÔNG phải Secret ID).</li>
+                          <li>Dán vào ô <strong>Client Secret</strong> ở trên + cập nhật <strong>Ngày hết hạn API</strong> = ngày mới.</li>
+                          <li>Nhấn <strong>Lưu</strong> → backend dùng secret mới trong ≤5 phút.</li>
+                        </ol>
+                        <p style={{ margin: '8px 0 0', color: 'var(--text-muted)' }}>⚠️ Nhầm Secret ID (GUID) thay vì Value sẽ lỗi <code>401 AADSTS7000215</code>.</p>
+                      </div>
+                    </details>
                   </div>
                 </div>
 

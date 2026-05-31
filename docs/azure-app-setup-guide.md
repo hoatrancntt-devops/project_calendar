@@ -90,6 +90,30 @@ Nhấn **Lưu tất cả** → backend sẽ nhận credentials và bắt đầu 
 
 ---
 
+## 🔄 Gia hạn Client Secret (khi sắp / đã hết hạn)
+
+> Client Secret của Azure App có thời hạn (tối đa 24 tháng). Khi sắp hết hạn, hệ thống gửi **email cảnh báo** + hiện **banner đỏ**. Làm các bước sau để gia hạn — **không cần tạo lại App, không mất cấu hình**.
+
+1. Vào **portal.azure.com** → **App registrations** → chọn app theo **Client ID** đang dùng.
+2. **Certificates & secrets** → tab **Client secrets** → **+ New client secret**.
+3. Description: `calendar-sync-<năm>`; Expires: **24 months** → **Add**.
+4. **Copy ngay cột Value** (dạng `abc~XYZ...`, chỉ hiện 1 lần — rời trang là mất).
+5. Quay lại **Settings → Companies → chọn công ty**:
+   - Dán giá trị mới vào ô **Client Secret**.
+   - Cập nhật **Ngày hết hạn API** = đúng ngày hết hạn mới (24 tháng sau).
+6. Nhấn **Lưu** → backend dùng secret mới ngay lần sync kế tiếp (≤ 5 phút).
+7. (Tùy chọn) Xóa secret cũ trong Azure sau khi xác nhận sync OK.
+
+> ⚠️ Copy đúng **Value**, KHÔNG phải **Secret ID** (GUID). Nhầm sẽ lỗi `401 AADSTS7000215`.
+
+Tương đương bằng Azure CLI:
+```bash
+az ad app credential reset --id <CLIENT_ID> --append --display-name "calendar-sync-2028" --end-date "2028-12-31"
+# copy "password" trong output → dán vào ô Client Secret
+```
+
+---
+
 ## Lưu ý bảo mật
 
 - Client Secret **không lưu trong browser** — chỉ truyền lên backend khi admin nhấn Lưu
