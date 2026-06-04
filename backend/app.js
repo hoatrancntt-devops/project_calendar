@@ -28,6 +28,9 @@ app.use('/api/sync',     requireApiKey, require('./routes/sync-routes'));
 app.use('/api/mail',     requireApiKey, require('./routes/mail-routes'));
 app.use('/api/settings', requireApiKey, require('./routes/settings-routes'));
 app.use('/api/users',    requireApiKey, require('./routes/app-users-routes'));
+// PWA manifest + home-screen icons (derived from the uploaded global logo). Keyed like the rest;
+// nginx injects the key when the browser/OS fetches /api/manifest.webmanifest and /api/*-icon*.
+app.use('/api',          requireApiKey, require('./routes/icon-routes'));
 app.get('/api/health',   (_, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
 
 app.listen(PORT, () => {

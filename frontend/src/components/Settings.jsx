@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Mail, Plus, X, RefreshCw, Users, Building2, Upload, Image, Trash2, ShieldCheck, Calendar, AlertTriangle } from 'lucide-react';
 // graphFetch removed — SMTP via backend
 import { daysUntilExpiry, expiryStatus } from '../lib/expiry-utils';
+import { generateAppIcons } from '../lib/app-icon';
 
 // Read a File as a data URL unchanged — used for SVG and as a fallback.
 function fileToDataURL(file) {
@@ -290,7 +291,9 @@ export default function Settings({
     if (!file) return;
     try {
       const dataUrl = await processLogo(file);
-      const updated = { ...localGlobal, globalCompanyLogo: dataUrl };
+      // Also derive square PNG home-screen/PWA icons from this logo (best-effort).
+      const icons = await generateAppIcons(dataUrl).catch(() => ({}));
+      const updated = { ...localGlobal, globalCompanyLogo: dataUrl, ...icons };
       setLocalGlobal(updated);
       onSaveAdminSettings(updated);
       fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
@@ -426,7 +429,7 @@ export default function Settings({
                     <Upload size={12} /> {t ? t('choose_file') : 'Chọn Tệp'} <input type="file" accept="image/*" onChange={handleGlobalLogoUpload} style={{ display: 'none' }} />
                   </label>
                   {localGlobal.globalCompanyLogo && (
-                    <button className="btn" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--accent)' }} onClick={() => setLocalGlobal({...localGlobal, globalCompanyLogo: null})}>Xóa Logo</button>
+                    <button className="btn" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--accent)' }} onClick={() => setLocalGlobal({...localGlobal, globalCompanyLogo: null, appIcon192: '', appIcon512: '', appIcon180: ''})}>Xóa Logo</button>
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '16px' }}>

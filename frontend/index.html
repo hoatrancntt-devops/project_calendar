@@ -4,7 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HLV - Lịch Trình</title>
+
+    <!-- PWA / home-screen shortcut: manifest + icons are served dynamically from the uploaded
+         global logo via the backend (under /api so nginx injects the key). Icon routes have no
+         file extension on purpose (nginx static-asset regex would otherwise intercept them). -->
+    <link rel="manifest" href="/api/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/api/apple-touch-icon" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Lịch Họp" />
+
+    <title>Lịch Họp - HLV</title>
   </head>
   <body>
     <div id="root"></div>
