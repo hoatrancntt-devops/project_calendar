@@ -33,6 +33,15 @@
 - `GET /api/events?companyIds=...` — List cached events from SQLite
 - `POST /api/sync` — Trigger immediate sync
 - `GET /api/health` — Health check (status + timestamp)
+- `GET /api/manifest.webmanifest` — PWA manifest (app name "Lịch Họp - HLV", start_url `/`)
+- `GET /api/app-icon-192` · `/api/app-icon-512` · `/api/apple-touch-icon` — home-screen icons (PNG)
+
+**PWA / home-screen shortcut icon:**
+- Icons are derived from the admin-uploaded **global logo** (`app_settings`), rasterized to square PNG (192/512/180) in the browser on logo upload.
+- Manifest + icons are served under `/api` so nginx proxies them and injects the internal key (no nginx change needed).
+- Icon routes have **no `.png` extension** on purpose — nginx's `\.(png|...)$` static-asset regex would otherwise intercept them and 404. Content-Type drives rendering.
+- After deploy, admin must **re-upload the logo once** to populate icons (no auto-migration). Until then `manifest.icons` is empty and the OS uses a default icon.
+- iOS caches `apple-touch-icon` at "Add to Home Screen" time — changing the logo later won't update shortcuts already added.
 
 **Database Schema:**
 - `companies`: id, company_name, tenant_id, client_id, client_secret, sync_mailboxes
@@ -102,6 +111,19 @@ sudo docker compose up -d  # without --build to use cached image
 - All Docker layers cached on first deploy; subsequent builds are fast
 
 ## Changelog
+
+### 2026-06-04 — Per-Mailbox Reconcile + PWA Shortcut Icon
+
+**Fix — calendar sync reconcile (`backend/services/calendar-sync.js`):**
+- Sync now reconciles **per mailbox** instead of per company. Changing a company's sync mailbox now actually replaces the old calendar (previously stale events lingered because the per-company partial-response guard + delete-all-by-company kept them).
+- Orphan cleanup removes events of de-configured mailboxes; partial-response guard + delete/insert scoped to `(company_id, mailbox)`; mailbox normalized lowercase; new-event email dedup + notify only for established mailboxes.
+- Frontend `visibleEvents` enforces `allowedMailboxes` so a mailbox-restricted user only sees permitted mailboxes (UI render gate; backend has no per-user identity).
+
+**Feature — PWA home-screen shortcut icon:**
+- New `frontend/src/lib/app-icon.js` (canvas rasterize), `backend/routes/icon-routes.js` (manifest + icon serving), index.html manifest/apple-touch-icon/meta.
+- See **PWA / home-screen shortcut icon** under Backend Services above.
+
+**Deployment Impact:** No new env vars. Schema unchanged (uses existing `events.mailbox` + `app_settings`). First sync after deploy runs orphan cleanup. Admin should re-upload the global logo once to generate shortcut icons.
 
 ### 2026-05-28 — Microsoft SSO, API Expiry Alerts & Email Configuration
 **New Features:**
