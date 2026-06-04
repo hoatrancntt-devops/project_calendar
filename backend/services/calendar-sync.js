@@ -73,13 +73,48 @@ const recordNotifyErr = db.prepare(`
   ON CONFLICT(company_id) DO UPDATE SET last_error = excluded.last_error
 `);
 
-const deleteByCompany = db.prepare('DELETE FROM events WHERE company_id = ?');
-const insertEvent     = db.prepare(`
+const deleteByMailbox       = db.prepare('DELETE FROM events WHERE company_id = ? AND mailbox = ?');
+const existingIdsByMailbox  = db.prepare('SELECT id FROM events WHERE company_id = ? AND mailbox = ?');
+const distinctDbMailboxes   = db.prepare('SELECT DISTINCT mailbox FROM events WHERE company_id = ?');
+const insertEvent           = db.prepare(`
   INSERT OR REPLACE INTO events
     (id, company_id, mailbox, title, date, time, type, location, room, attendees, attendee_count, organizer, organizer_name, status, synced_at)
   VALUES
     (@id, @companyId, @mailbox, @title, @date, @time, @type, @location, @room, @attendees, @attendeeCount, @organizer, @organizerName, @status, @syncedAt)
 `);
+
+const PAGE_SIZE       = 100;
+const MAX_PER_MAILBOX = 1000; // safety cap to bound a runaway calendar
+
+/**
+ * Fetch ALL calendarView events for ONE mailbox in [startDT, future] via pagination.
+ * Graph caps a page at $top, so we follow @odata.nextLink; $orderby gives deterministic
+ * (chronological) paging — without it only the first page was fetched (silent truncation).
+ */
+async function fetchMailboxEvents(token, mailbox, company, startDT, future, select) {
+  let url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/calendarView` +
+    `?startDateTime=${encodeURIComponent(startDT)}&endDateTime=${encodeURIComponent(future)}` +
+    `&$orderby=${encodeURIComponent('start/dateTime')}&$top=${PAGE_SIZE}&$select=${select}`;
+  const events = [];
+  let fetched = 0;
+  while (url && fetched < MAX_PER_MAILBOX) {
+    let data;
+    try {
+      ({ data } = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }));
+    } catch (err) {
+      const status = err.response?.status;
+      const detail = err.response?.data?.error?.message || err.message;
+      console.error(`[sync] ${company.id}/${mailbox}: Graph API ${status} — ${detail}`);
+      throw new Error(`Graph API ${status}: ${detail}`);
+    }
+    for (const item of (data.value || [])) { events.push(transformEvent(item, company.id, mailbox)); fetched++; }
+    url = data['@odata.nextLink'] || null;
+  }
+  if (fetched >= MAX_PER_MAILBOX) {
+    console.warn(`[sync] ${company.id}/${mailbox}: hit MAX_PER_MAILBOX cap (${MAX_PER_MAILBOX}) — some events may be unsynced`);
+  }
+  return events;
+}
 
 async function syncCompany(company) {
   const mailboxes = JSON.parse(company.sync_mailboxes || '[]');
@@ -106,64 +141,69 @@ async function syncCompany(company) {
   const select = 'id,subject,start,end,location,isOnlineMeeting,attendees,organizer,showAs,isCancelled';
   const syncedAt = new Date().toISOString();
 
-  // Fetch ALL events in window via pagination — Graph caps a page at $top, so we
-  // must follow @odata.nextLink. $orderby gives deterministic paging (chronological).
-  // Without this, only the first 50 were fetched → events beyond that were never
-  // synced nor detected as "new" (silent truncation).
-  const PAGE_SIZE       = 100;
-  const MAX_PER_MAILBOX = 1000; // safety cap to bound a runaway calendar
-  const events = [];
-  for (const mailbox of mailboxes) {
-    let url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/calendarView` +
-      `?startDateTime=${encodeURIComponent(startDT)}&endDateTime=${encodeURIComponent(future)}` +
-      `&$orderby=${encodeURIComponent('start/dateTime')}&$top=${PAGE_SIZE}&$select=${select}`;
-    let fetched = 0;
-    while (url && fetched < MAX_PER_MAILBOX) {
-      let data;
-      try {
-        ({ data } = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }));
-      } catch (err) {
-        const status = err.response?.status;
-        const detail = err.response?.data?.error?.message || err.message;
-        console.error(`[sync] ${company.id}/${mailbox}: Graph API ${status} — ${detail}`);
-        throw new Error(`Graph API ${status}: ${detail}`);
-      }
-      for (const item of (data.value || [])) { events.push(transformEvent(item, company.id, mailbox)); fetched++; }
-      url = data['@odata.nextLink'] || null;
-    }
-    if (fetched >= MAX_PER_MAILBOX) {
-      console.warn(`[sync] ${company.id}/${mailbox}: hit MAX_PER_MAILBOX cap (${MAX_PER_MAILBOX}) — some events may be unsynced`);
+  // Orphan cleanup: drop events whose source mailbox is no longer configured. This is what
+  // makes "đổi email lấy lịch" actually replace the old calendar — the de-configured mailbox's
+  // events are removed instead of lingering forever (they used to survive replace-all forever
+  // because the new mailbox's smaller set tripped the partial-response guard).
+  const configured = new Set(mailboxes.map(m => m.toLowerCase()));
+  for (const { mailbox: mb } of distinctDbMailboxes.all(company.id)) {
+    if (mb && !configured.has(mb.toLowerCase())) {
+      deleteByMailbox.run(company.id, mb);
+      console.log(`[sync] ${company.id}: removed events of de-configured mailbox ${mb}`);
     }
   }
 
-  // Detect new events: compare against existing event IDs before replacing
-  const existingRows = db.prepare('SELECT id FROM events WHERE company_id = ?').all(company.id);
-  const existingIds  = new Set(existingRows.map(r => r.id));
+  // Reconcile each mailbox INDEPENDENTLY. Keying the partial-response guard and the
+  // delete+replace per mailbox means a newly-added/changed mailbox (legitimately a different
+  // event set) is never mistaken for a partial Graph response of another mailbox.
+  let totalSynced = 0;
+  let totalNew    = 0;
+  const newForNotify = []; // only from already-established mailboxes (avoids first-sync spam)
 
-  // GUARD: Graph occasionally returns a partial result (e.g. 1 of 77 events) with no
-  // HTTP error. Because we replace-all, that would wipe the calendar down to the partial
-  // set — and when the full set returns next cycle, every event counts as "new" → a
-  // notification burst (and real new events can be missed meanwhile). So if a previously
-  // healthy set shrinks drastically, skip this destructive update and keep existing data.
-  if (existingIds.size >= 10 && events.length < existingIds.size * 0.5) {
-    console.warn(`[sync] ${company.id}: skipped replace — fetched ${events.length} << existing ${existingIds.size} (likely partial Graph response)`);
-    return { companyId: company.id, synced: existingIds.size, new: 0, skippedPartial: true };
+  for (const rawMailbox of mailboxes) {
+    // Normalize to lowercase at this single write boundary: email addresses are case-insensitive,
+    // and consistent casing keeps orphan cleanup, the existing-ids lookup, and deleteByMailbox all
+    // matching the same stored value (mixed case would otherwise leave permanently-orphaned rows).
+    // NOTE: Graph calendarView returns event ids scoped per mailbox, so the same meeting in two
+    // mailboxes has two distinct ids — no (id, company_id) PK collision across mailboxes.
+    const mailbox     = rawMailbox.toLowerCase();
+    const mbEvents    = await fetchMailboxEvents(token, mailbox, company, startDT, future, select);
+    const existingIds = new Set(existingIdsByMailbox.all(company.id, mailbox).map(r => r.id));
+
+    // GUARD: Graph occasionally returns a partial result (e.g. 1 of 77) with no HTTP error.
+    // Because we replace, that would wipe this mailbox down to the partial set. So if a
+    // previously healthy set shrinks drastically, skip this destructive update for THIS mailbox.
+    if (existingIds.size >= 10 && mbEvents.length < existingIds.size * 0.5) {
+      console.warn(`[sync] ${company.id}/${mailbox}: skipped replace — fetched ${mbEvents.length} << existing ${existingIds.size} (likely partial Graph response)`);
+      totalSynced += existingIds.size;
+      continue;
+    }
+
+    const newEvents = mbEvents.filter(ev => !existingIds.has(ev.id));
+    db.transaction(() => {
+      deleteByMailbox.run(company.id, mailbox);
+      for (const ev of mbEvents) insertEvent.run({ ...ev, syncedAt });
+    })();
+
+    totalSynced += mbEvents.length;
+    totalNew    += newEvents.length;
+    // Notify only for mailboxes that already had data (skip a mailbox's very first sync to
+    // avoid mass-emailing its whole calendar on initial setup or when newly added).
+    if (existingIds.size > 0) newForNotify.push(...newEvents);
   }
 
-  const newEvents = events.filter(ev => !existingIds.has(ev.id));
-
-  db.transaction(() => {
-    deleteByCompany.run(company.id);
-    for (const ev of events) insertEvent.run({ ...ev, syncedAt });
-  })();
-
-  // Email notification for genuinely new events — skip the very first sync (no prior events)
-  // to avoid mass-emailing the whole calendar on initial setup. Only alert for UPCOMING
-  // events (date >= today HCM) so the 30-day lookback doesn't notify about past meetings.
+  // Email notification for genuinely new UPCOMING events (date >= today HCM, so the 30-day
+  // lookback doesn't notify about past meetings) from established mailboxes.
   const notifyEmails = JSON.parse(company.notify_emails || '[]');
   const todayHCM = new Date(Date.now() + HCM_OFFSET_MS).toISOString().slice(0, 10);
-  const upcomingNew = newEvents.filter(ev => ev.date && ev.date >= todayHCM);
-  if (existingIds.size > 0 && upcomingNew.length > 0 && notifyEmails.length > 0) {
+  const seenIds = new Set();
+  const upcomingNew = newForNotify.filter(ev => {
+    if (!ev.date || ev.date < todayHCM) return false;
+    if (seenIds.has(ev.id)) return false; // dedup: never email the same meeting twice in one run
+    seenIds.add(ev.id);
+    return true;
+  });
+  if (upcomingNew.length > 0 && notifyEmails.length > 0) {
     sendNewEventsEmail(company, upcomingNew, notifyEmails)
       .then(() => recordNotifyOk.run(company.id, new Date().toISOString()))
       .catch(err => {
@@ -172,7 +212,7 @@ async function syncCompany(company) {
       });
   }
 
-  return { companyId: company.id, synced: events.length, new: newEvents.length };
+  return { companyId: company.id, synced: totalSynced, new: totalNew };
 }
 
 /** Send an email listing newly-added calendar events to the company's notify recipients. */

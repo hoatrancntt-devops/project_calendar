@@ -522,7 +522,13 @@ export default function App() {
   const visibleEvents = events.filter(ev => {
     if (!allowedCompanyIds.includes(ev.companyId)) return false;
     if (!activeCompanyIds.includes(ev.companyId)) return false;
-    // Mailbox filter: only restrict if this company has specific mailboxes chosen
+    // MAILBOX PERMISSION (client-side render gate — NOT a server boundary; the backend has no
+    // per-user identity, so /api/events still returns all mailboxes). If the user is restricted
+    // to specific mailboxes for this company, the UI only ever shows those — regardless of the
+    // "Tất cả" selection. Manual events (no mailbox) are unaffected. Empty list = full access.
+    const permitted = currentUser?.allowedMailboxes?.[ev.companyId];
+    if (permitted?.length && ev.mailbox && !permitted.includes(ev.mailbox)) return false;
+    // UI selection: further narrow to whatever mailboxes the user ticked (subset of permitted)
     const mbSel = companySelectedMailboxes(ev.companyId);
     if (mbSel.length && ev.mailbox && !mbSel.includes(ev.mailbox)) return false;
     return true;
