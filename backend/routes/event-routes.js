@@ -32,6 +32,7 @@ router.get('/', (req, res) => {
     time:           e.time,
     type:           e.type,
     location:       e.location,
+    joinUrl:        e.join_url,
     room:           e.room,
     attendees:      e.attendees,
     attendeeCount:  e.attendee_count,

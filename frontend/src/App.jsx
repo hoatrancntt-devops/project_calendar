@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
   Calendar as CalendarIcon, Plus, Users, Video, RefreshCw, LogOut,
   ChevronLeft, ChevronRight, Briefcase, MapPin, CheckCircle2, Menu, X,
-  Settings as SettingsIcon, AlertTriangle, KeyRound, Printer, Sun, Moon, ChevronDown, Building2
+  Settings as SettingsIcon, AlertTriangle, KeyRound, Printer, Sun, Moon, ChevronDown, Building2, ExternalLink
 } from 'lucide-react';
 import SettingsComponent from './components/Settings';
+import { safeHttpUrl } from './lib/safe-url';
 import { printCalendar } from './lib/print-calendar';
 import { translations } from './i18n';
 import { daysUntilExpiry, expiryStatus, EXPIRY_DEFAULTS } from './lib/expiry-utils';
@@ -353,8 +354,8 @@ export default function App() {
 
     syncAndRefresh(); // immediate sync + load on login / page load
 
-    const pollInterval = setInterval(refresh, 60_000);            // refetch cached events every 1 min
-    const syncInterval = setInterval(syncAndRefresh, 15 * 60_000); // full M365 sync every 15 min
+    const pollInterval = setInterval(refresh, 60_000);           // refetch cached events every 1 min
+    const syncInterval = setInterval(syncAndRefresh, 5 * 60_000); // full M365 sync every 5 min (matches backend cron)
 
     const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', onVisible);
@@ -1145,6 +1146,7 @@ export default function App() {
       {calSelectedEvent && (() => {
         const ev = calSelectedEvent;
         const isTeams = ev.type === 'teams';
+        const joinUrl = safeHttpUrl(ev.joinUrl); // null unless a valid http(s) online-meeting link
         const co = companies.find(c => c.id === ev.companyId);
         const color = getCompanyColor(ev.companyId);
         return (
@@ -1165,7 +1167,9 @@ export default function App() {
                   <CalendarIcon size={16} style={{ color, flexShrink: 0 }} />
                   <div><div className="font-semibold text-slate-800">{ev.date}</div>{ev.time && <div className="text-slate-500 text-xs mt-0.5">🕐 {ev.time}</div>}</div>
                 </div>
-                {isTeams ? (
+                {joinUrl ? (
+                  <a href={joinUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-colors"><Video size={16} className="text-emerald-600 flex-shrink-0" /><span className="text-emerald-700 font-medium underline">Tham gia cuộc họp trực tuyến</span><ExternalLink size={14} className="text-emerald-500 flex-shrink-0 ml-auto" /></a>
+                ) : isTeams ? (
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-100"><Video size={16} className="text-emerald-600 flex-shrink-0" /><span className="text-emerald-700 font-medium">Cuộc họp Microsoft Teams</span></div>
                 ) : (ev.room||ev.location) ? (
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-100"><MapPin size={16} className="text-amber-600 flex-shrink-0" /><span className="text-slate-700">{ev.room||ev.location}</span></div>

@@ -88,6 +88,8 @@ try { db.exec("ALTER TABLE events ADD COLUMN mailbox TEXT DEFAULT ''"); } catch 
 try { db.exec("ALTER TABLE events ADD COLUMN organizer_name TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE events ADD COLUMN attendee_count INTEGER DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE events ADD COLUMN room TEXT DEFAULT ''"); } catch {}
+// Join URL for online meetings (Teams/Zoom/Webex...) so the UI can render a clickable join link
+try { db.exec("ALTER TABLE events ADD COLUMN join_url TEXT DEFAULT ''"); } catch {}
 // Mail provider: 'smtp' (default) or 'graph' (Microsoft Graph Mail.Send — avoids SMTP basic auth)
 try { db.exec("ALTER TABLE smtp_config ADD COLUMN mail_provider TEXT DEFAULT 'smtp'"); } catch {}
 try { db.exec("ALTER TABLE smtp_config ADD COLUMN graph_tenant_id TEXT DEFAULT ''"); } catch {}

@@ -32,6 +32,15 @@ function toHCMComponents(dtStr) {
   };
 }
 
+/** Allow only http(s) URLs through; reject javascript:/data: etc. to prevent stored XSS. */
+function safeHttpUrl(raw) {
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    return (u.protocol === 'https:' || u.protocol === 'http:') ? u.toString() : '';
+  } catch { return ''; }
+}
+
 /** Map a Graph calendarView item to the shape the frontend expects. */
 function transformEvent(item, companyId, mailbox) {
   const start = toHCMComponents(item.start?.dateTime);
@@ -53,6 +62,9 @@ function transformEvent(item, companyId, mailbox) {
     time:           start.hhmm && end.hhmm ? `${start.hhmm} - ${end.hhmm}` : '',
     type:           item.isOnlineMeeting ? 'teams' : 'offline',
     location:       item.location?.displayName || (item.isOnlineMeeting ? 'Microsoft Teams' : ''),
+    // Clickable join link for ANY online meeting (Teams/Zoom/Webex...) when Graph provides one.
+    // Validate scheme so a tampered/non-http(s) URL is never persisted (stored-XSS guard).
+    joinUrl:        safeHttpUrl(item.onlineMeeting?.joinUrl),
     room,
     attendees:      humanAttendees.map(a => a.emailAddress?.address).filter(Boolean).join(', '),
     attendeeCount:  humanAttendees.length,
@@ -78,9 +90,9 @@ const existingIdsByMailbox  = db.prepare('SELECT id FROM events WHERE company_id
 const distinctDbMailboxes   = db.prepare('SELECT DISTINCT mailbox FROM events WHERE company_id = ?');
 const insertEvent           = db.prepare(`
   INSERT OR REPLACE INTO events
-    (id, company_id, mailbox, title, date, time, type, location, room, attendees, attendee_count, organizer, organizer_name, status, synced_at)
+    (id, company_id, mailbox, title, date, time, type, location, join_url, room, attendees, attendee_count, organizer, organizer_name, status, synced_at)
   VALUES
-    (@id, @companyId, @mailbox, @title, @date, @time, @type, @location, @room, @attendees, @attendeeCount, @organizer, @organizerName, @status, @syncedAt)
+    (@id, @companyId, @mailbox, @title, @date, @time, @type, @location, @joinUrl, @room, @attendees, @attendeeCount, @organizer, @organizerName, @status, @syncedAt)
 `);
 
 const PAGE_SIZE       = 100;
@@ -138,7 +150,8 @@ async function syncCompany(company) {
   windowStart.setHours(0, 0, 0, 0);
   const startDT = windowStart.toISOString();
   const future  = new Date(Date.now() + 90 * 24 * 3_600_000).toISOString(); // +90 days
-  const select = 'id,subject,start,end,location,isOnlineMeeting,attendees,organizer,showAs,isCancelled';
+  // onlineMeeting is a complex object → $select returns it whole; we read onlineMeeting.joinUrl
+  const select = 'id,subject,start,end,location,isOnlineMeeting,onlineMeeting,attendees,organizer,showAs,isCancelled';
   const syncedAt = new Date().toISOString();
 
   // Orphan cleanup: drop events whose source mailbox is no longer configured. This is what
@@ -219,12 +232,18 @@ async function syncCompany(company) {
 async function sendNewEventsEmail(company, newEvents, recipients) {
   const rows = newEvents
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
-    .map(ev => `
+    .map(ev => {
+      // joinUrl is already scheme-validated (http/https only) in transformEvent → safe in href.
+      const form = ev.joinUrl
+        ? `📹 <a href="${ev.joinUrl}" style="color:#0f766e;font-weight:600;text-decoration:underline;">Tham gia họp</a>`
+        : (ev.type === 'teams' ? '📹 Teams' : '📍 ' + (ev.room || ev.location || 'Offline'));
+      return `
       <tr>
         <td style="padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap;">${ev.date} ${ev.time}</td>
         <td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">${ev.title}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;">${ev.type === 'teams' ? '📹 Teams' : '📍 ' + (ev.room || ev.location || 'Offline')}</td>
-      </tr>`).join('');
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;">${form}</td>
+      </tr>`;
+    }).join('');
 
   // Source mailbox(es) the new events came from. A company may sync several mailboxes,
   // so collapse to "N hòm thư" when more than one to keep the subject readable.
