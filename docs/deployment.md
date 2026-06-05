@@ -24,7 +24,7 @@
 ## Backend Services
 
 **Calendar Sync Pipeline:**
-1. **Cron Job** (`jobs/sync-job.js`): Runs on startup + every 15 minutes
+1. **Cron Job** (`jobs/sync-job.js`): Runs on startup + every 5 minutes (frontend triggers a sync on page load and every 5 min to match)
 2. **Graph Auth** (`services/graph-auth.js`): Client credentials flow → Azure AD token (cached per tenant)
 3. **Calendar Sync** (`services/calendar-sync.js`): Fetches `/users/{mailbox}/calendarView` → transforms → stores in SQLite
 
@@ -45,7 +45,7 @@
 
 **Database Schema:**
 - `companies`: id, company_name, tenant_id, client_id, client_secret, sync_mailboxes
-- `events`: id, company_id, title, date, time, type, location, attendees, organizer, status, synced_at
+- `events`: id, company_id, mailbox, title, date, time, type, location, join_url, room, attendees, attendee_count, organizer, organizer_name, status, synced_at
 
 ## Deploy Command
 
@@ -111,6 +111,19 @@ sudo docker compose up -d  # without --build to use cached image
 - All Docker layers cached on first deploy; subsequent builds are fast
 
 ## Changelog
+
+### 2026-06-05 — Online-Meeting Join Links + 5-Min Sync
+
+**Feature — clickable join link for online meetings:**
+- Graph sync now selects `onlineMeeting` and persists `onlineMeeting.joinUrl` into a new `events.join_url` column (migration is additive; existing rows backfill on the next sync).
+- Join URL is scheme-validated (http/https only) on the backend (`safeHttpUrl` in `calendar-sync.js`) and again on the frontend (`frontend/src/lib/safe-url.js`) before rendering an `<a href>` — prevents stored-XSS via `javascript:`/`data:` URLs.
+- Event detail modal (`App.jsx`) and the new-event notification email (`sendNewEventsEmail`) render a clickable "Tham gia cuộc họp trực tuyến" link when a valid join URL exists; otherwise fall back to static text.
+
+**Sync cadence:** frontend periodic M365 sync aligned from 15 min → **5 min** to match the backend cron. Page load still triggers an immediate sync (no manual button needed).
+
+**Cleanup:** removed dead-code components `Dashboard.jsx`, `Calendar.jsx`, `BookingModal.jsx` (not imported by `App.jsx`; tree-shaken out of the bundle).
+
+**Deployment Impact:** No new env vars. Schema migration is automatic (additive `join_url` column). First sync after deploy backfills join links for existing events.
 
 ### 2026-06-04 — Per-Mailbox Reconcile + PWA Shortcut Icon
 
